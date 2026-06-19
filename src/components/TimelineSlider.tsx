@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { formatYear } from "@/utils/gameUtils";
 
 interface TimelineSliderProps {
   value: number;
@@ -19,16 +20,47 @@ export default function TimelineSlider({
 }: TimelineSliderProps) {
   const percentage = ((value - min) / (max - min)) * 100;
 
-  const ticks = [1600, 1700, 1800, 1900, 1950, 2000, 2026];
+  // Build evenly spaced tick marks across the (possibly very wide) range.
+  const TICK_COUNT = 6;
+  const ticks = Array.from({ length: TICK_COUNT + 1 }, (_, i) =>
+    Math.round(min + (i * (max - min)) / TICK_COUNT)
+  );
+
+  const clamp = (v: number) => Math.min(max, Math.max(min, v));
+  const step = (delta: number) => !disabled && onChange(clamp(value + delta));
 
   return (
     <div className="w-full select-none">
-      {/* Year display */}
-      <div className="flex items-baseline gap-2 mb-5">
-        <span className="text-5xl font-bold text-white" style={{ fontFamily: "var(--font-sora)" }}>
-          {value}
-        </span>
-        <span className="text-sm text-[#4a5063] font-medium">an selectat</span>
+      {/* Year display with step buttons — fixed height so BC/AD never resize the panel */}
+      <div className="flex items-center justify-between gap-3 mb-4 h-16">
+        {/* [-] fine-tune button */}
+        <button
+          type="button"
+          onClick={() => step(-1)}
+          disabled={disabled || value <= min}
+          aria-label="Anul anterior"
+          className="shrink-0 w-9 h-9 rounded-full flex items-center justify-center bg-white/5 border border-white/15 text-[#f5c842] text-xl font-bold leading-none transition-all duration-200 hover:bg-[#f5c842] hover:text-[#111318] hover:border-[#f5c842] active:scale-90 disabled:opacity-30 disabled:hover:bg-white/5 disabled:hover:text-[#f5c842] disabled:cursor-not-allowed cursor-pointer"
+        >
+          −
+        </button>
+
+        <div className="flex-1 min-w-0 text-center">
+          <div className="text-4xl font-bold text-white tabular-nums whitespace-nowrap leading-none truncate" style={{ fontFamily: "var(--font-sora)" }}>
+            {formatYear(value)}
+          </div>
+          <div className="text-[11px] text-gray-300 font-medium mt-1 whitespace-nowrap">an selectat</div>
+        </div>
+
+        {/* [+] fine-tune button */}
+        <button
+          type="button"
+          onClick={() => step(1)}
+          disabled={disabled || value >= max}
+          aria-label="Anul următor"
+          className="shrink-0 w-9 h-9 rounded-full flex items-center justify-center bg-white/5 border border-white/15 text-[#f5c842] text-xl font-bold leading-none transition-all duration-200 hover:bg-[#f5c842] hover:text-[#111318] hover:border-[#f5c842] active:scale-90 disabled:opacity-30 disabled:hover:bg-white/5 disabled:hover:text-[#f5c842] disabled:cursor-not-allowed cursor-pointer"
+        >
+          +
+        </button>
       </div>
 
       {/* Slider */}
@@ -59,7 +91,6 @@ export default function TimelineSlider({
       {/* Tick marks */}
       <div className="flex justify-between mt-1">
         {ticks.map((tick) => {
-          const pos = ((tick - min) / (max - min)) * 100;
           const isActive = value >= tick;
           return (
             <button
@@ -75,11 +106,11 @@ export default function TimelineSlider({
                 } group-hover:bg-[#f7d160]`}
               />
               <span
-                className={`text-[10px] font-medium transition-colors ${
+                className={`text-[10px] font-medium whitespace-nowrap transition-colors ${
                   isActive ? "text-[#f5c842]" : "text-[#4a5063]"
                 } group-hover:text-white`}
               >
-                {tick}
+                {formatYear(tick)}
               </span>
             </button>
           );

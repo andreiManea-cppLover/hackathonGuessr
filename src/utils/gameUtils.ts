@@ -51,10 +51,60 @@ export function getSarcasticRemark(score: number, distanceKm: number, yearDiff: 
   return `Felicitări, tocmai ai creat un paradox temporal! ${distanceKm} km distanță și ${yearDiff} ani decalaj. Sincer, nici nu știu cum ai reușit să fii atât de pe lângă.`;
 }
 
+// Display a year with an era suffix; negative years are BC (î.Hr.).
+export function formatYear(year: number): string {
+  return year < 0 ? `${Math.abs(year)} î.Hr.` : `${year}`;
+}
+
+// Minor English words that should stay lowercase inside a title (unless first).
+const TITLE_MINOR_WORDS = new Set([
+  "of", "the", "and", "in", "on", "at", "to", "a", "an", "for", "vs", "with", "by",
+]);
+
+// Detect a (case-insensitive) Roman numeral so "Xvi" → "XVI", "Vii" → "VII".
+function isRomanNumeral(word: string): boolean {
+  return /^m{0,3}(cm|cd|d?c{0,3})(xc|xl|l?x{0,3})(ix|iv|v?i{0,3})$/i.test(word) && word.length > 0;
+}
+
+/**
+ * Clean up a raw, machine-humanized title (e.g. "Execution Of Louis Xvi")
+ * into a properly cased display string ("Execution of Louis XVI").
+ * Lowercases minor words, uppercases Roman numerals, capitalizes the rest.
+ */
+export function formatHistoricalTitle(title: string): string {
+  const words = title.trim().split(/\s+/);
+  return words
+    .map((word, i) => {
+      const lower = word.toLowerCase();
+      if (isRomanNumeral(word)) return word.toUpperCase();
+      if (i !== 0 && TITLE_MINOR_WORDS.has(lower)) return lower;
+      return lower.charAt(0).toUpperCase() + lower.slice(1);
+    })
+    .join(" ");
+}
+
+/**
+ * Romanian display title for a historical event. Prefers an explicit `titleRo`,
+ * otherwise cleans up the raw (often English) `title`.
+ */
+export function getRomanianTitle(loc: { title: string; titleRo?: string }): string {
+  return loc.titleRo?.trim() || formatHistoricalTitle(loc.title);
+}
+
+/**
+ * Wikipedia URL for an event. Uses an explicit `wikiUrl` when provided,
+ * otherwise builds a Romanian-Wikipedia search link from the display title.
+ */
+export function getWikipediaUrl(loc: { title: string; titleRo?: string; wikiUrl?: string }): string {
+  if (loc.wikiUrl) return loc.wikiUrl;
+  const query = encodeURIComponent(getRomanianTitle(loc));
+  return `https://ro.wikipedia.org/wiki/Special:Search?search=${query}`;
+}
+
 export function getTemporalTitle(totalScore: number): string {
   if (totalScore >= 23000) return "Stăpânul Absolut al Timpului (Chrono-King)";
   if (totalScore >= 18000) return "Navigator Temporal de Elită";
   if (totalScore >= 12000) return "Călător de Duminică";
   if (totalScore >= 6000) return "Rătăcit în Spațiu-Timp";
-  return "Eroare în Matricea Temporală (Novice)";
+  return "Novice Temporal";
 }

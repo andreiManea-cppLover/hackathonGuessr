@@ -1,18 +1,29 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { historicalLocations, HistoricalLocation } from "@/data/locations";
+import { HistoricalLocation } from "@/data/locations";
+import { panoramaLocations, PANORAMA_MIN_YEAR } from "@/data/panoramas";
 import { calculateDistance, calculateScore, getSarcasticRemark, getTemporalTitle } from "@/utils/gameUtils";
 import TimelineSlider from "@/components/TimelineSlider";
 import GuessMap from "@/components/GuessMap";
+import ResultsPanel from "@/components/ResultsPanel";
+import ProPaywallModal from "@/components/ProPaywallModal";
+import { MAX_FREE_GAMES, getGamesRemaining, canPlay, recordGamePlayed } from "@/utils/dailyLimit";
 import confetti from "canvas-confetti";
 import {
-  MapPin, Clock, ChevronRight, Trophy, RotateCcw, Zap,
-  HelpCircle, Volume2, VolumeX, Target, Calendar,
-  TrendingUp, Award, Star, ArrowRight, Globe,
+  MapPin, Clock, RotateCcw, Zap,
+  HelpCircle, Volume2, VolumeX, Target,
+  Award, ArrowRight, Globe,
+  Maximize2, Minimize2, Save, Home as HomeIcon, CheckCircle2, Trophy,
 } from "lucide-react";
 
 type GameState = "MENU" | "PLAYING" | "RESULT" | "SUMMARY";
+
+// Timeline spans the full temporal range of the panorama pool (BC → present).
+const SLIDER_MIN = Math.floor(PANORAMA_MIN_YEAR / 100) * 100; // e.g. -2600
+const SLIDER_MAX = 2026;
+const SLIDER_MID = Math.round((SLIDER_MIN + SLIDER_MAX) / 2);
+const ROUNDS_PER_GAME = 5;
 
 interface LeaderboardEntry {
   name: string;
@@ -21,21 +32,21 @@ interface LeaderboardEntry {
   date: string;
 }
 
-// ── Score bar component ──────────────────────────────────────────────────────
-function ScoreBar({ label, value, max, color }: { label: string; value: number; max: number; color: string }) {
-  const pct = Math.min(100, (value / max) * 100);
+// ── Daily free-games indicator pill ──────────────────────────────────────────
+function EnergyPill({ remaining, max }: { remaining: number; max: number }) {
+  const empty = remaining <= 0;
   return (
-    <div>
-      <div className="flex justify-between text-sm mb-1.5">
-        <span className="text-[#4a5063] font-medium">{label}</span>
-        <span className="text-white font-bold">+{value.toLocaleString()} pct</span>
-      </div>
-      <div className="h-2 bg-[#2e3340] rounded-full overflow-hidden">
-        <div
-          className="h-full rounded-full transition-all duration-700"
-          style={{ width: `${pct}%`, background: color }}
-        />
-      </div>
+    <div
+      title="Jocuri gratuite rămase azi"
+      className={`inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-xs font-semibold backdrop-blur transition-colors ${
+        empty
+          ? "bg-[#e05252]/15 border-[#e05252]/50 text-[#e05252]"
+          : "bg-white/5 border-white/10 text-gray-300"
+      }`}
+    >
+      <Zap size={13} className={empty ? "text-[#e05252]" : "text-[#f5c842]"} />
+      Energii gratuite:
+      <span className="tabular-nums font-bold">{remaining}/{max}</span>
     </div>
   );
 }
@@ -46,7 +57,12 @@ export default function Home() {
   const [rounds, setRounds] = useState<HistoricalLocation[]>([]);
   const [currentRoundIndex, setCurrentRoundIndex] = useState(0);
   const [totalScore, setTotalScore] = useState(0);
-  const [selectedYear, setSelectedYear] = useState(1800);
+  const [roundScores, setRoundScores] = useState<number[]>([]);
+  const [bestScore, setBestScore] = useState<number | null>(null);
+  const [isNewRecord, setIsNewRecord] = useState(false);
+  const [gamesRemaining, setGamesRemaining] = useState(MAX_FREE_GAMES);
+  const [showPaywall, setShowPaywall] = useState(false);
+  const [selectedYear, setSelectedYear] = useState(SLIDER_MID);
   const [guessCoords, setGuessCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [timer, setTimer] = useState(90);
   const [isTimerActive, setIsTimerActive] = useState(false);
@@ -60,11 +76,14 @@ export default function Home() {
   const [powerUps, setPowerUps] = useState({ clue: true, delorean: true });
   const [clueVisible, setClueVisible] = useState(false);
   const [clueIndex, setClueIndex] = useState(0);
-  const [sliderMin, setSliderMin] = useState(1600);
-  const [sliderMax, setSliderMax] = useState(2026);
+  const [sliderMin, setSliderMin] = useState(SLIDER_MIN);
+  const [sliderMax, setSliderMax] = useState(SLIDER_MAX);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [mapExpanded, setMapExpanded] = useState(false);
+  const [mapRecenter, setMapRecenter] = useState(0);
+  const [showPinWarning, setShowPinWarning] = useState(false);
   const audioCtx = useRef<AudioContext | null>(null);
+  const pinWarnTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Pannellum (360° panorama) viewer state & refs
   const [pannellumLoaded, setPannellumLoaded] = useState(false);
@@ -92,6 +111,34 @@ export default function Home() {
       osc.stop(ctx.currentTime + dur);
     } catch { /* ignore */ }
   };
+
+  // ── Personal best (localStorage) — evaluated when the summary screen opens ──
+  useEffect(() => {
+    if (gameState !== "SUMMARY") return;
+
+    let prev: number | null = null;
+    try {
+      const raw = localStorage.getItem("chronoMap_bestScore");
+      if (raw !== null) {
+        const n = parseInt(raw, 10);
+        if (!Number.isNaN(n)) prev = n;
+      }
+    } catch { /* ignore */ }
+
+    const beat = prev === null ? totalScore > 0 : totalScore > prev;
+    if (prev === null || totalScore > prev) {
+      try { localStorage.setItem("chronoMap_bestScore", String(totalScore)); } catch { /* ignore */ }
+      setBestScore(totalScore);
+    } else {
+      setBestScore(prev);
+    }
+    setIsNewRecord(beat);
+  }, [gameState, totalScore]);
+
+  // ── Daily free-games counter — synced on the client (avoids SSR mismatch) ──
+  useEffect(() => {
+    setGamesRemaining(getGamesRemaining());
+  }, [gameState]);
 
   // ── Leaderboard fetch ────────────────────────────────────────────────────
   useEffect(() => {
@@ -213,38 +260,53 @@ export default function Home() {
   // ── Game helpers ─────────────────────────────────────────────────────────
   const resetRound = () => {
     setGuessCoords(null);
-    setSelectedYear(1800);
+    setSelectedYear(SLIDER_MID);
     setTimer(90);
     setIsTimerActive(true);
     setClueVisible(false);
-    setSliderMin(1600);
-    setSliderMax(2026);
+    setSliderMin(SLIDER_MIN);
+    setSliderMax(SLIDER_MAX);
     setMapExpanded(false);
+    setShowPinWarning(false);
     setGameState("PLAYING");
   };
 
   const handleStartGame = () => {
-    const firstRound = historicalLocations.find(loc => loc.id === "1") || historicalLocations[0];
-    const otherLocations = historicalLocations.filter(loc => loc.id !== "1");
-    const shuffledOthers = [...otherLocations].sort(() => 0.5 - Math.random()).slice(0, 4);
-    const shuffled = [firstRound, ...shuffledOthers];
+    // Pick a random set of 360° panoramas (geo + temporal metadata baked into each entry).
+    const shuffled = [...panoramaLocations]
+      .sort(() => 0.5 - Math.random())
+      .slice(0, ROUNDS_PER_GAME);
     setRounds(shuffled);
     setCurrentRoundIndex(0);
     setTotalScore(0);
+    setRoundScores([]);
     setScoreSubmitted(false);
     setPowerUps({ clue: true, delorean: true });
     setGameState("PLAYING");
     setGuessCoords(null);
-    setSelectedYear(1800);
+    setSelectedYear(SLIDER_MID);
     setTimer(90);
     setIsTimerActive(true);
     setClueVisible(false);
-    setSliderMin(1600);
-    setSliderMax(2026);
+    setSliderMin(SLIDER_MIN);
+    setSliderMax(SLIDER_MAX);
     setMapExpanded(false);
+    setShowPinWarning(false);
     beep(523, 0.15, "triangle");
     setTimeout(() => beep(659, 0.15, "triangle"), 160);
     setTimeout(() => beep(784, 0.25, "triangle"), 320);
+  };
+
+  // Freemium gate: every "Play" entry point goes through here.
+  const attemptStartGame = () => {
+    if (!canPlay()) {
+      setShowPaywall(true);
+      beep(300, 0.14, "square");
+      return;
+    }
+    recordGamePlayed();
+    setGamesRemaining(getGamesRemaining());
+    handleStartGame();
   };
 
   const handleLockGuess = () => {
@@ -259,8 +321,21 @@ export default function Home() {
       remark: getSarcasticRemark(rs, distanceKm, yearDiff),
     });
     setTotalScore((prev) => prev + rs);
+    setRoundScores((prev) => [...prev, rs]);
     setGameState("RESULT");
     beep(523, 0.08, "square");
+  };
+
+  // CTA click — guard against a missing pin with a transient warning toast
+  const handleGuessClick = () => {
+    if (!guessCoords) {
+      setShowPinWarning(true);
+      beep(300, 0.14, "square");
+      if (pinWarnTimeout.current) clearTimeout(pinWarnTimeout.current);
+      pinWarnTimeout.current = setTimeout(() => setShowPinWarning(false), 2800);
+      return;
+    }
+    handleLockGuess();
   };
 
   const handleNextRound = () => {
@@ -289,8 +364,8 @@ export default function Home() {
     beep(800, 0.15, "sawtooth");
     setPowerUps((p) => ({ ...p, delorean: false }));
     const y = rounds[currentRoundIndex].year;
-    const newMin = Math.max(1600, y - Math.floor(Math.random() * 20 + 20));
-    const newMax = Math.min(2026, y + Math.floor(Math.random() * 20 + 20));
+    const newMin = Math.max(SLIDER_MIN, y - Math.floor(Math.random() * 20 + 20));
+    const newMax = Math.min(SLIDER_MAX, y + Math.floor(Math.random() * 20 + 20));
     setSliderMin(newMin);
     setSliderMax(newMax);
     setSelectedYear(Math.round((newMin + newMax) / 2));
@@ -336,114 +411,84 @@ export default function Home() {
 
       {/* ─── MENU ─────────────────────────────────────────────────────────── */}
       {gameState === "MENU" && (
-        <div className="flex-1 flex flex-col">
-          {/* Top bar */}
-          <header className="flex items-center justify-between px-8 py-5 border-b border-[#2e3340]">
-            <div className="flex items-center gap-3">
+        <div className="relative flex-1 flex flex-col h-screen overflow-hidden">
+          {/* ── Cinematic background: Earth from space + heavy overlay for readability ── */}
+          <div className="absolute inset-0">
+            <img
+              src="https://images.unsplash.com/photo-1614730321146-b6fa6a46bcb4?q=80&w=2000"
+              alt=""
+              aria-hidden
+              className="w-full h-full object-cover"
+            />
+            <div className="absolute inset-0 bg-gradient-to-b from-black/80 via-black/75 to-black/95" />
+            <div className="absolute inset-0 bg-black/40" />
+          </div>
+
+          {/* ── Header overlay ── */}
+          <header className="relative z-10 flex items-center justify-between px-6 md:px-10 py-5">
+            <div className="flex items-center gap-2.5">
               <Globe size={22} className="text-[#f5c842]" />
-              <span className="text-lg font-bold" style={{ fontFamily: "var(--font-sora)" }}>
+              <span className="text-lg font-bold tracking-tight" style={{ fontFamily: "var(--font-sora)" }}>
                 Chrono<span className="text-[#f5c842]">Map</span>
               </span>
             </div>
-            <button
-              onClick={() => setSoundEnabled((s) => !s)}
-              className="p-2 rounded-lg hover:bg-[#1e2128] text-[#4a5063] hover:text-white transition-colors cursor-pointer border border-transparent hover:border-[#2e3340]"
-            >
-              {soundEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />}
-            </button>
+            <div className="flex items-center gap-3">
+              <EnergyPill remaining={gamesRemaining} max={MAX_FREE_GAMES} />
+              <button
+                onClick={() => setSoundEnabled((s) => !s)}
+                title={soundEnabled ? "Oprește sunetul" : "Pornește sunetul"}
+                className="p-2.5 rounded-xl bg-white/5 border border-white/10 text-gray-300 hover:text-[#f5c842] hover:border-[#f5c842]/50 transition-colors cursor-pointer"
+              >
+                {soundEnabled ? <Volume2 size={18} /> : <VolumeX size={18} />}
+              </button>
+            </div>
           </header>
 
-          {/* Hero section */}
-          <div className="flex-grow flex flex-col md:flex-row items-center justify-between px-8 lg:px-16 py-8 gap-8 max-w-7xl mx-auto w-full">
-            
-            {/* Left Images (Symmetric Column 1 - Hidden on mobile, shown on tablet/desktop) */}
-            <div className="hidden md:flex flex-col gap-6 w-full md:w-1/4 max-w-[240px] animate-fade-in">
-              <div className="relative group overflow-hidden rounded-2xl border border-[#2e3340] hover:border-[#f5c842]/50 transition-all duration-300 shadow-lg shadow-black/40">
-                <img src="/images/bg1.png" alt="Ancient Egypt" className="w-full aspect-[4/3] object-cover filter brightness-75 group-hover:brightness-100 group-hover:scale-105 transition-all duration-500" />
-                <div className="absolute bottom-2 left-3 bg-black/60 backdrop-blur px-2.5 py-1 rounded-md border border-white/5 text-[10px] font-semibold text-[#f5c842] uppercase tracking-wider italic">Egiptul Antic</div>
-              </div>
-              <div className="relative group overflow-hidden rounded-2xl border border-[#2e3340] hover:border-[#f5c842]/50 transition-all duration-300 shadow-lg shadow-black/40">
-                <img src="/images/bg3.png" alt="Industrial Revolution" className="w-full aspect-[4/3] object-cover filter brightness-75 group-hover:brightness-100 group-hover:scale-105 transition-all duration-500" />
-                <div className="absolute bottom-2 left-3 bg-black/60 backdrop-blur px-2.5 py-1 rounded-md border border-white/5 text-[10px] font-semibold text-[#f5c842] uppercase tracking-wider italic">Revoluția Industrială</div>
-              </div>
+          {/* ── Hero: perfectly centered single column ── */}
+          <main className="relative z-10 flex-1 flex flex-col items-center justify-center text-center px-6 py-10 max-w-3xl mx-auto w-full">
+            {/* Badge */}
+            <div className="inline-flex items-center gap-2 bg-[#f5c842]/10 border border-[#f5c842]/25 rounded-full px-5 py-2 text-[11px] md:text-xs font-semibold text-[#f5c842] uppercase tracking-[0.18em] mb-8">
+              <Zap size={13} /> Joc de Geografie Temporală
             </div>
 
-            {/* Center — CTA (The text in between the images) */}
-            <div className="flex-1 flex flex-col justify-center items-center text-center max-w-xl mx-auto py-6">
-              <div className="inline-flex items-center gap-2 bg-[#f5c842]/10 border border-[#f5c842]/25 rounded-full px-5 py-2 text-xs font-semibold text-[#f5c842] uppercase tracking-wider mb-6 italic">
-                <Zap size={13} /> Joc de Geografie Temporală
-              </div>
+            {/* Title with glow */}
+            <h1
+              className="text-5xl md:text-7xl lg:text-8xl font-black tracking-tight leading-[1.05] mb-6 text-white"
+              style={{
+                fontFamily: "var(--font-sora)",
+                textShadow: "0 0 40px rgba(245,200,66,0.35), 0 4px 28px rgba(0,0,0,0.7)",
+              }}
+            >
+              Ghicește <span className="text-[#f5c842]">Epoca</span>
+              <br className="hidden sm:block" /> &amp; <span className="text-[#f5c842]">Locul</span>
+            </h1>
 
-              <h1 className="text-5xl lg:text-7xl font-black leading-tight mb-8 italic text-[#f5c842] tracking-tight" style={{ fontFamily: "var(--font-sora)" }}>
-                Ghicește<br />
-                <span className="text-[#f5c842]">Epoca</span> &amp;<br />
-                <span className="text-[#f5c842]">Locul</span>
-              </h1>
+            {/* Subtitle */}
+            <p className="text-gray-300/90 text-base md:text-lg max-w-xl mb-10 leading-relaxed">
+              Analizează imagini istorice fascinante și ghicește în ce an și unde au fost
+              surprinse. Fiecare rundă — o epocă nouă de descoperit.
+            </p>
 
-              <p className="text-[#f5c842]/80 text-lg lg:text-xl mb-12 leading-relaxed max-w-md italic font-medium">
-                Analizează imagini istorice fascinante și ghicește în ce an și unde au fost surprinse.
-                Fiecare rundă — o epocă nouă de descoperit.
-              </p>
-
-              <div className="flex flex-col sm:flex-row gap-6 mb-12 w-full justify-center items-center">
-                <span className="flex items-center gap-1.5 text-sm text-[#f5c842]/70 font-semibold italic">
-                  <Clock size={16} /> 90s/rundă
+            {/* Unified central block: settings + start button */}
+            <div className="w-full max-w-md flex flex-col items-center gap-6 bg-white/[0.06] backdrop-blur-md border border-white/10 rounded-2xl px-6 md:px-8 py-7 shadow-2xl shadow-black/50">
+              <div className="flex items-center justify-center gap-5 text-sm text-gray-200 font-medium">
+                <span className="flex items-center gap-2">
+                  <Clock size={16} className="text-[#f5c842]" /> 90s / rundă
                 </span>
-                <button
-                  id="btn-start-game"
-                  onClick={handleStartGame}
-                  className="btn-primary text-lg px-10 py-5 text-center justify-center italic"
-                >
-                  <Play size={20} /> Pornește Aventura
-                </button>
-                <span className="flex items-center gap-1.5 text-sm text-[#f5c842]/70 font-semibold italic">
-                  <Target size={16} /> 5 Runde
+                <span className="w-px h-4 bg-white/15" />
+                <span className="flex items-center gap-2">
+                  <Target size={16} className="text-[#f5c842]" /> 5 Runde
                 </span>
               </div>
-
-              {/* How to play chips */}
-              <div className="flex flex-wrap justify-center gap-3">
-                {[
-                  { icon: <Globe size={15} />, text: "Pune pin pe hartă" },
-                  { icon: <Calendar size={15} />, text: "Selectează anul" },
-                  { icon: <TrendingUp size={15} />, text: "Câștigă puncte" },
-                ].map((item) => (
-                  <div key={item.text} className="flex items-center gap-2.5 bg-[#1e2128] border border-[#2e3340] rounded-full px-4.5 py-2.5 text-xs text-[#f5c842] font-semibold italic">
-                    <span className="text-[#f5c842]">{item.icon}</span>
-                    {item.text}
-                  </div>
-                ))}
-              </div>
+              <button
+                id="btn-start-game"
+                onClick={attemptStartGame}
+                className="btn-primary w-full justify-center text-lg px-10 py-5"
+              >
+                <Play size={20} /> Pornește Aventura
+              </button>
             </div>
-
-            {/* Right Images (Symmetric Column 2 - Hidden on mobile, shown on tablet/desktop) */}
-            <div className="hidden md:flex flex-col gap-6 w-full md:w-1/4 max-w-[240px] animate-fade-in">
-              <div className="relative group overflow-hidden rounded-2xl border border-[#2e3340] hover:border-[#f5c842]/50 transition-all duration-300 shadow-lg shadow-black/40">
-                <img src="/images/bg2.png" alt="Medieval Castle" className="w-full aspect-[4/3] object-cover filter brightness-75 group-hover:brightness-100 group-hover:scale-105 transition-all duration-500" />
-                <div className="absolute bottom-2 left-3 bg-black/60 backdrop-blur px-2.5 py-1 rounded-md border border-white/5 text-[10px] font-semibold text-[#f5c842] uppercase tracking-wider italic">Evul Mediu</div>
-              </div>
-              <div className="relative group overflow-hidden rounded-2xl border border-[#2e3340] hover:border-[#f5c842]/50 transition-all duration-300 shadow-lg shadow-black/40">
-                <img src="/images/bg4.png" alt="Future DeLorean" className="w-full aspect-[4/3] object-cover filter brightness-75 group-hover:brightness-100 group-hover:scale-105 transition-all duration-500" />
-                <div className="absolute bottom-2 left-3 bg-black/60 backdrop-blur px-2.5 py-1 rounded-md border border-white/5 text-[10px] font-semibold text-[#f5c842] uppercase tracking-wider italic">Călătoria în Timp</div>
-              </div>
-            </div>
-
-            {/* Mobile/Tablet image grid (shown only on mobile) */}
-            <div className="grid grid-cols-2 gap-4 w-full max-w-md md:hidden mt-8">
-              {[
-                { src: "/images/bg1.png", label: "Egiptul Antic" },
-                { src: "/images/bg2.png", label: "Evul Mediu" },
-                { src: "/images/bg3.png", label: "Revoluția Industrială" },
-                { src: "/images/bg4.png", label: "Călătoria în Timp" },
-              ].map((img, i) => (
-                <div key={i} className="relative group overflow-hidden rounded-xl border border-[#2e3340] shadow-md shadow-black/40">
-                  <img src={img.src} alt={img.label} className="w-full aspect-[4/3] object-cover filter brightness-75" />
-                  <div className="absolute bottom-1.5 left-2 bg-black/60 backdrop-blur px-2 py-0.5 rounded border border-white/5 text-[8px] font-semibold text-[#f5c842] uppercase tracking-wider italic">{img.label}</div>
-                </div>
-              ))}
-            </div>
-
-          </div>
+          </main>
         </div>
       )}
 
@@ -521,17 +566,17 @@ export default function Home() {
               </span>
             </div>
 
-            {/* Power-ups */}
+            {/* Control buttons — unified glassmorphism, accent only on active/toggle */}
             <div className="flex gap-2">
               <button
                 id="btn-powerup-clue"
                 onClick={useClue}
                 disabled={!powerUps.clue}
                 title="Indiciu (Bunicul Guraliv)"
-                className={`w-10 h-10 rounded-xl border flex items-center justify-center transition-all duration-200 cursor-pointer ${
+                className={`w-10 h-10 rounded-xl border backdrop-blur flex items-center justify-center transition-all duration-200 ${
                   powerUps.clue
-                    ? "bg-black/60 backdrop-blur border-white/20 hover:bg-[#f5c842]/20 hover:border-[#f5c842]/60 text-[#f5c842] hover:scale-110 active:scale-95"
-                    : "bg-black/30 border-white/5 text-[#2e3340] cursor-not-allowed"
+                    ? "bg-black/60 border-white/15 text-white hover:text-[#f5c842] hover:border-[#f5c842]/60 hover:scale-110 active:scale-95 cursor-pointer"
+                    : "bg-black/30 border-white/5 text-[#3a3f50] cursor-not-allowed"
                 }`}
               >
                 <HelpCircle size={16} />
@@ -541,17 +586,22 @@ export default function Home() {
                 onClick={useDelorean}
                 disabled={!powerUps.delorean}
                 title="DeLorean Warp (îngustează intervalul de ani)"
-                className={`w-10 h-10 rounded-xl border flex items-center justify-center transition-all duration-200 cursor-pointer ${
+                className={`w-10 h-10 rounded-xl border backdrop-blur flex items-center justify-center transition-all duration-200 ${
                   powerUps.delorean
-                    ? "bg-black/60 backdrop-blur border-white/20 hover:bg-[#4dbb6e]/20 hover:border-[#4dbb6e]/60 text-[#4dbb6e] hover:scale-110 active:scale-95"
-                    : "bg-black/30 border-white/5 text-[#2e3340] cursor-not-allowed"
+                    ? "bg-black/60 border-white/15 text-white hover:text-[#f5c842] hover:border-[#f5c842]/60 hover:scale-110 active:scale-95 cursor-pointer"
+                    : "bg-black/30 border-white/5 text-[#3a3f50] cursor-not-allowed"
                 }`}
               >
                 <Zap size={16} />
               </button>
               <button
                 onClick={() => setSoundEnabled((s) => !s)}
-                className="w-10 h-10 rounded-xl border border-white/10 bg-black/60 backdrop-blur flex items-center justify-center text-gray-400 hover:text-white hover:bg-black/80 transition-all cursor-pointer"
+                title={soundEnabled ? "Oprește sunetul" : "Pornește sunetul"}
+                className={`w-10 h-10 rounded-xl border backdrop-blur flex items-center justify-center transition-all duration-200 hover:scale-110 active:scale-95 cursor-pointer ${
+                  soundEnabled
+                    ? "bg-black/60 border-white/15 text-white hover:text-[#f5c842] hover:border-[#f5c842]/60"
+                    : "bg-[#f5c842]/15 border-[#f5c842]/50 text-[#f5c842]"
+                }`}
               >
                 {soundEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
               </button>
@@ -566,12 +616,10 @@ export default function Home() {
             </div>
           )}
 
-          {/* ── Bottom panel: Year selector + Guess button ── */}
-          <div className="absolute bottom-6 left-6 right-6 z-30 flex items-end gap-4">
-            <div
-              className="flex-1 bg-[#111318]/90 backdrop-blur-md border border-[#2e3340] rounded-2xl p-5"
-              style={{ maxWidth: "600px" }}
-            >
+          {/* ── Bottom panel: Timeline (left) · CTA (center) · map footprint (right) ── */}
+          <div className="absolute bottom-6 left-6 right-6 z-30 flex items-stretch gap-4">
+            {/* Timeline panel — same footprint as the map */}
+            <div className="w-[380px] h-[210px] shrink-0 overflow-hidden bg-[#111318]/90 backdrop-blur-md border border-[#2e3340] rounded-2xl p-5 flex flex-col">
               <div className="text-xs font-semibold text-[#4a5063] uppercase tracking-widest mb-4">
                 📅 În ce an a fost surprinsă această imagine?
               </div>
@@ -583,45 +631,61 @@ export default function Home() {
               />
             </div>
 
-            {/* Guess button */}
-            <div className="flex flex-col items-center gap-2">
-              {!guessCoords && (
-                <div className="bg-black/70 backdrop-blur border border-[#e05252]/40 rounded-lg px-3 py-2 text-xs text-[#e05252] font-medium max-w-[160px] text-center">
-                  <MapPin size={12} className="inline mr-1 pin-pulse" />
-                  Plasează pin pe hartă
-                </div>
-              )}
-              <button
-                id="btn-lock-guess"
-                onClick={handleLockGuess}
-                disabled={!guessCoords}
-                className="btn-primary px-7 py-4 text-sm whitespace-nowrap"
-                style={!guessCoords ? { background: "#1e2128", color: "#4a5063", boxShadow: "none", cursor: "not-allowed" } : {}}
-              >
-                <ChevronRight size={18} />
-                Fă Guess-ul!
-              </button>
+            {/* Guess button — primary CTA, centered between the two panels */}
+            <div className="flex-1 flex items-center justify-center">
+              <div className="relative">
+                {/* Dynamic warning toast: only when CTA pressed without a pin */}
+                {showPinWarning && (
+                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 z-50 score-pop bg-[#e05252] text-white rounded-xl px-4 py-2.5 text-xs font-semibold whitespace-nowrap shadow-lg shadow-[#e05252]/40 flex items-center gap-1.5">
+                    <MapPin size={13} className="pin-pulse" />
+                    Plasează mai întâi un pin pe hartă!
+                    <span className="absolute top-full left-1/2 -translate-x-1/2 -mt-px border-[6px] border-transparent border-t-[#e05252]" />
+                  </div>
+                )}
+                <button
+                  id="btn-lock-guess"
+                  onClick={handleGuessClick}
+                  className={`btn-primary px-9 py-5 text-base font-extrabold whitespace-nowrap transition-all duration-200 ${
+                    guessCoords
+                      ? "shadow-[0_8px_28px_rgba(245,200,66,0.45)] hover:scale-[1.03]"
+                      : "opacity-80 hover:opacity-100"
+                  }`}
+                >
+                  <Target size={20} />
+                  Confirmă Locația și Anul
+                </button>
+              </div>
             </div>
+
+            {/* Right spacer — reserves the map footprint so the CTA stays centered */}
+            <div className="w-[380px] h-[210px] shrink-0 pointer-events-none" aria-hidden />
           </div>
 
-          {/* ── Map corner (GeoGuessr style) ── */}
+          {/* ── Map corner (GeoGuessr style) — expands on hover or via toggle ── */}
           <div
             id="map-corner"
             className={`map-corner ${mapExpanded ? "expanded" : ""}`}
-            onMouseEnter={() => setMapExpanded(true)}
-            onMouseLeave={() => setMapExpanded(false)}
           >
-            {/* Label */}
+            {/* Expand / collapse toggle — fixed size unless deliberately toggled */}
+            <button
+              onClick={() => setMapExpanded((p) => !p)}
+              title={mapExpanded ? "Restrânge harta" : "Extinde harta"}
+              className="absolute top-2 right-2 z-[1000] w-8 h-8 rounded-lg bg-black/70 backdrop-blur border border-white/15 text-white hover:text-[#f5c842] hover:border-[#f5c842]/60 flex items-center justify-center transition-all duration-200 active:scale-90 cursor-pointer"
+            >
+              {mapExpanded ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+            </button>
+
+            {/* Hint label */}
             {!guessCoords && !mapExpanded && (
               <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
-                <div className="bg-black/70 rounded-lg px-3 py-2 text-xs text-gray-400 font-medium flex items-center gap-1.5">
+                <div className="bg-black/70 rounded-lg px-3 py-2 text-xs text-gray-300 font-medium flex items-center gap-1.5">
                   <MapPin size={12} className="pin-pulse" /> Click pe hartă
                 </div>
               </div>
             )}
             <GuessMap
               guessCoords={guessCoords}
-              onPlaceMarker={(c) => { beep(523, 0.06); setGuessCoords(c); }}
+              onPlaceMarker={(c) => { beep(523, 0.06); setShowPinWarning(false); setGuessCoords(c); }}
             />
           </div>
         </div>
@@ -631,97 +695,16 @@ export default function Home() {
       {gameState === "RESULT" && rounds[currentRoundIndex] && roundResult && (
         <div className="flex-1 flex flex-col lg:flex-row overflow-hidden" style={{ height: "100vh" }}>
           {/* Left: Info panel */}
-          <div className="lg:w-[420px] xl:w-[480px] shrink-0 flex flex-col border-r border-[#2e3340] overflow-y-auto">
-            <div className="p-6 border-b border-[#2e3340]">
-              <div className="flex items-center gap-2 text-xs text-[#4a5063] font-semibold uppercase tracking-widest mb-3">
-                <Globe size={12} className="text-[#f5c842]" />
-                Runda {currentRoundIndex + 1} / 5 · Rezultate
-              </div>
-              <div className="round-progress mb-4">
-                <div className="round-progress-fill" style={{ width: `${((currentRoundIndex + 1) / 5) * 100}%` }} />
-              </div>
-
-              {/* Round score */}
-              <div className="text-center py-4 score-pop">
-                <div className="text-xs text-[#4a5063] font-medium uppercase tracking-widest mb-1">Scor Rundă</div>
-                <div
-                  className="text-6xl font-black"
-                  style={{
-                    fontFamily: "var(--font-sora)",
-                    color: roundResult.roundScore >= 4000 ? "#4dbb6e" : roundResult.roundScore >= 2000 ? "#f5c842" : "#e05252",
-                  }}
-                >
-                  +{roundResult.roundScore.toLocaleString()}
-                </div>
-                <div className="text-sm text-[#4a5063] mt-1">
-                  Total acumulat: <span className="text-white font-semibold">{totalScore.toLocaleString()} pct</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Score breakdown */}
-            <div className="p-6 border-b border-[#2e3340] flex flex-col gap-4">
-              <h3 className="font-bold text-sm uppercase tracking-widest text-[#4a5063]">Detalii Scor</h3>
-              <ScoreBar
-                label={`Distanță — ${roundResult.distanceKm} km`}
-                value={roundResult.distanceScore}
-                max={2500}
-                color="#f5c842"
-              />
-              <ScoreBar
-                label={`Timp — ${roundResult.yearDiff} ani diferență`}
-                value={roundResult.yearScore}
-                max={2500}
-                color="#4dbb6e"
-              />
-            </div>
-
-            {/* AI Remark */}
-            <div className="p-6 border-b border-[#2e3340]">
-              <div className="bg-[#1e2128] border border-[#2e3340] rounded-xl p-4">
-                <div className="text-[11px] font-bold text-[#4a5063] uppercase tracking-widest mb-2 flex items-center gap-1.5">
-                  🤖 ChronoAI
-                </div>
-                <p className="text-sm text-gray-300 italic leading-relaxed">
-                  &ldquo;{roundResult.remark}&rdquo;
-                </p>
-              </div>
-            </div>
-
-            {/* Historical context */}
-            <div className="p-6 flex-1">
-              <div className="flex items-center gap-2 mb-3">
-                <Calendar size={15} className="text-[#f5c842]" />
-                <h3 className="font-bold text-sm text-white">{rounds[currentRoundIndex].title}</h3>
-              </div>
-              <div className="flex items-center gap-4 text-xs text-[#4a5063] mb-3">
-                <span className="flex items-center gap-1">
-                  <Star size={11} className="text-[#f5c842]" />
-                  An corect: <strong className="text-white ml-1">{rounds[currentRoundIndex].year}</strong>
-                </span>
-                <span className="flex items-center gap-1">
-                  <MapPin size={11} className="text-[#4dbb6e]" />
-                  {rounds[currentRoundIndex].lat.toFixed(2)}, {rounds[currentRoundIndex].lng.toFixed(2)}
-                </span>
-              </div>
-              <p className="text-sm text-[#4a5063] leading-relaxed">{rounds[currentRoundIndex].description}</p>
-            </div>
-
-            {/* Next button */}
-            <div className="p-6 border-t border-[#2e3340]">
-              <button
-                id="btn-next-round"
-                onClick={handleNextRound}
-                className="btn-primary w-full justify-center text-center py-4 text-base"
-              >
-                {currentRoundIndex < 4 ? (
-                  <><ArrowRight size={18} /> Runda Următoare</>
-                ) : (
-                  <><Trophy size={18} /> Vezi Rezumatul</>
-                )}
-              </button>
-            </div>
-          </div>
+          <ResultsPanel
+            round={rounds[currentRoundIndex]}
+            result={roundResult}
+            currentRoundIndex={currentRoundIndex}
+            totalRounds={ROUNDS_PER_GAME}
+            totalScore={totalScore}
+            isLastRound={currentRoundIndex >= ROUNDS_PER_GAME - 1}
+            onNext={handleNextRound}
+            onRecenter={() => setMapRecenter((n) => n + 1)}
+          />
 
           {/* Right: Map (full height) */}
           <div className="flex-1 relative">
@@ -730,15 +713,16 @@ export default function Home() {
               onPlaceMarker={() => {}}
               actualCoords={{ lat: rounds[currentRoundIndex].lat, lng: rounds[currentRoundIndex].lng }}
               showResults={true}
+              recenterSignal={mapRecenter}
             />
-            {/* Legend */}
-            <div className="absolute bottom-5 left-5 flex flex-col gap-2 z-30">
+            {/* Legend — bottom-right, clear of the left panel seam */}
+            <div className="absolute bottom-5 right-5 flex flex-col gap-2 z-30">
               <div className="bg-black/70 backdrop-blur border border-white/10 rounded-lg px-3 py-2 flex items-center gap-2 text-xs text-gray-300">
-                <div className="w-3 h-3 rounded-full bg-[#f5c842] border border-white" />
+                <MapPin size={13} className="text-[#f5c842]" />
                 Estimarea ta
               </div>
               <div className="bg-black/70 backdrop-blur border border-white/10 rounded-lg px-3 py-2 flex items-center gap-2 text-xs text-gray-300">
-                <div className="w-3 h-3 rounded-full bg-[#4dbb6e] border border-white" />
+                <Target size={13} className="text-[#4dbb6e]" />
                 Locul corect
               </div>
             </div>
@@ -748,7 +732,7 @@ export default function Home() {
 
       {/* ─── SUMMARY ──────────────────────────────────────────────────────── */}
       {gameState === "SUMMARY" && (
-        <div className="flex-1 flex flex-col">
+        <div className="flex flex-col h-screen overflow-hidden">
           {/* Header */}
           <header className="flex items-center justify-between px-8 py-5 border-b border-[#2e3340]">
             <div className="flex items-center gap-3">
@@ -759,77 +743,163 @@ export default function Home() {
             </div>
           </header>
 
-          <div className="flex-1 flex flex-col items-center justify-center p-8">
-            <div className="w-full max-w-xl flex flex-col gap-8 mx-auto">
-              {/* Score summary */}
-              <div className="flex flex-col gap-6 w-full">
-                <div className="text-center">
-                  <div className="text-sm text-[#4a5063] font-semibold uppercase tracking-widest mb-2">Misiune Finalizată!</div>
-                  <h2 className="text-5xl font-black leading-tight" style={{ fontFamily: "var(--font-sora)" }}>
-                    Scor Final
-                  </h2>
-                </div>
+          <div className="flex-1 flex flex-col items-center justify-center p-6 sm:p-8">
+            <div className="w-full max-w-lg flex flex-col gap-6 mx-auto">
+              {/* Heading */}
+              <div className="text-center">
+                <div className="text-sm text-[#4a5063] font-semibold uppercase tracking-[0.2em] mb-2">Misiune Finalizată</div>
+                <h2 className="text-4xl sm:text-5xl font-black leading-tight" style={{ fontFamily: "var(--font-sora)" }}>
+                  Scor Final
+                </h2>
+              </div>
 
-                <div className="card p-8 text-center score-pop">
-                  <div
-                    className="text-8xl font-black mb-2"
-                    style={{
-                      fontFamily: "var(--font-sora)",
-                      color: totalScore >= 20000 ? "#4dbb6e" : totalScore >= 10000 ? "#f5c842" : "#e8eaf0",
-                    }}
-                  >
-                    {totalScore.toLocaleString()}
-                  </div>
-                  <div className="text-[#4a5063] text-sm font-medium">puncte din 25,000 posibile</div>
-                  <div className="mt-4 pt-4 border-t border-[#2e3340] text-lg font-semibold text-[#f5c842]">
-                    {getTemporalTitle(totalScore)}
-                  </div>
-                </div>
+              {/* ── Gamified score ring + rank ── */}
+              {(() => {
+                const max = ROUNDS_PER_GAME * 5000;
+                const pct = Math.min(100, Math.round((totalScore / max) * 100));
+                const ringColor =
+                  totalScore >= 20000 ? "#4dbb6e" : totalScore >= 10000 ? "#f5c842" : "#e05252";
+                const R = 88;
+                const C = 2 * Math.PI * R;
+                const dash = (pct / 100) * C;
+                return (
+                  <div className="card p-7 sm:p-8 flex flex-col items-center score-pop">
+                    {/* New record badge */}
+                    {isNewRecord && (
+                      <div
+                        className="mb-5 inline-flex items-center gap-2 rounded-full px-4 py-1.5 bg-emerald-500/15 border border-emerald-400/50 text-emerald-300 text-xs font-bold uppercase tracking-widest score-pop"
+                        style={{ boxShadow: "0 0 22px rgba(52,211,153,0.45)" }}
+                      >
+                        <Award size={14} /> Nou Record!
+                      </div>
+                    )}
 
-                {/* Submit score */}
-                {!scoreSubmitted ? (
-                  <form onSubmit={handleSubmitScore} className="card p-6">
-                    <h4 className="font-bold text-sm mb-4 text-center" style={{ fontFamily: "var(--font-sora)" }}>
-                      📋 Salvează-ți scorul
-                    </h4>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        placeholder="Nickname tău..."
-                        value={playerName}
-                        onChange={(e) => setPlayerName(e.target.value.toUpperCase())}
-                        maxLength={12}
-                        required
-                        className="flex-1 bg-[#111318] border border-[#2e3340] rounded-xl px-4 py-3 text-white font-semibold focus:outline-none focus:border-[#f5c842] uppercase tracking-wider text-sm placeholder:text-[#2e3340] placeholder:normal-case placeholder:font-normal transition-colors"
-                      />
-                      <button type="submit" className="btn-primary px-5 py-3 whitespace-nowrap">
-                        Salvează
-                      </button>
+                    {/* Progress ring */}
+                    <div className="relative w-52 h-52">
+                      <svg className="w-full h-full -rotate-90" viewBox="0 0 200 200">
+                        <circle cx="100" cy="100" r={R} fill="none" stroke="#2e3340" strokeWidth="12" />
+                        <circle
+                          cx="100" cy="100" r={R} fill="none"
+                          stroke={ringColor} strokeWidth="12" strokeLinecap="round"
+                          strokeDasharray={`${dash} ${C}`}
+                          style={{
+                            transition: "stroke-dasharray 1.1s cubic-bezier(0.4,0,0.2,1)",
+                            filter: `drop-shadow(0 0 8px ${ringColor}80)`,
+                          }}
+                        />
+                      </svg>
+                      <div className="absolute inset-0 flex flex-col items-center justify-center">
+                        <div
+                          className="text-5xl font-black tabular-nums leading-none"
+                          style={{ fontFamily: "var(--font-sora)", color: ringColor }}
+                        >
+                          {totalScore.toLocaleString()}
+                        </div>
+                        <div className="text-[11px] text-[#4a5063] font-medium mt-1.5">
+                          din {max.toLocaleString()}
+                        </div>
+                        <div className="mt-2 text-xs font-bold tabular-nums" style={{ color: ringColor }}>
+                          {pct}%
+                        </div>
+                      </div>
                     </div>
-                  </form>
-                ) : (
-                  <div className="card p-4 border-[#4dbb6e]/30 bg-[#4dbb6e]/5 flex items-center gap-3">
-                    <span className="text-xl">✅</span>
-                    <div>
-                      <div className="font-bold text-sm text-[#4dbb6e]">Scor salvat cu succes!</div>
-                      <div className="text-xs text-[#4a5063]">Scorul tău a fost înregistrat.</div>
+
+                    {/* Rank badge */}
+                    <div
+                      className="mt-6 inline-flex items-center gap-2.5 rounded-full pl-3 pr-5 py-2 border"
+                      style={{
+                        background: `${ringColor}1a`,
+                        borderColor: `${ringColor}59`,
+                      }}
+                    >
+                      <span
+                        className="w-7 h-7 rounded-full flex items-center justify-center text-[#111318]"
+                        style={{ background: ringColor }}
+                      >
+                        <Trophy size={15} />
+                      </span>
+                      <span className="text-sm font-bold" style={{ color: ringColor }}>
+                        {getTemporalTitle(totalScore)}
+                      </span>
+                    </div>
+
+                    {/* Personal best */}
+                    <div className="mt-4 flex items-center gap-1.5 text-sm font-medium text-gray-400">
+                      <Trophy size={14} />
+                      Record Personal:
+                      <span className="text-gray-200 font-semibold tabular-nums">
+                        {(bestScore ?? totalScore).toLocaleString()}
+                      </span>
                     </div>
                   </div>
-                )}
+                );
+              })()}
 
-                <div className="flex gap-3">
-                  <button id="btn-play-again" onClick={handleStartGame} className="btn-primary flex-1 justify-center py-4">
-                    <RotateCcw size={16} /> Joacă Din Nou
-                  </button>
-                  <button onClick={() => setGameState("MENU")} className="btn-secondary flex-1 justify-center py-4">
-                    🏠 Meniu Principal
-                  </button>
+              {/* ── Match summary breakdown ── */}
+              <div className="card p-5">
+                <div className="text-[11px] font-bold text-[#4a5063] uppercase tracking-[0.16em] mb-3">
+                  Rezumat Runde
                 </div>
+                <div className="flex items-stretch gap-2.5">
+                  {Array.from({ length: ROUNDS_PER_GAME }).map((_, i) => {
+                    const s = roundScores[i];
+                    const has = s !== undefined;
+                    const c = !has ? "#2e3340" : s >= 4000 ? "#4dbb6e" : s >= 2000 ? "#f5c842" : "#e05252";
+                    return (
+                      <div key={i} className="flex-1 flex flex-col items-center gap-2">
+                        <div
+                          className="w-full rounded-lg py-2.5 flex items-center justify-center text-xs font-bold tabular-nums border transition-all"
+                          style={{
+                            background: has ? `${c}1f` : "transparent",
+                            borderColor: `${c}66`,
+                            color: c,
+                          }}
+                        >
+                          {has ? s.toLocaleString() : "—"}
+                        </div>
+                        <span className="text-[10px] text-[#4a5063] font-medium">R{i + 1}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* ── Action buttons: primary CTA + secondary ── */}
+              <div className="flex flex-row gap-4">
+                <button
+                  id="btn-play-again"
+                  onClick={attemptStartGame}
+                  className="btn-primary flex-1 justify-center py-4 text-base shadow-[0_8px_28px_rgba(245,200,66,0.45)] hover:scale-[1.02] transition-transform"
+                >
+                  <RotateCcw size={18} /> Joacă Din Nou
+                </button>
+                <button
+                  onClick={() => setGameState("MENU")}
+                  className="flex-1 justify-center py-4 inline-flex items-center gap-2 rounded-[10px] font-semibold text-sm bg-white/5 border border-white/10 text-gray-200 hover:bg-white/10 hover:border-white/20 hover:text-white active:scale-[0.98] transition-all cursor-pointer"
+                  style={{ fontFamily: "var(--font-sora)" }}
+                >
+                  <HomeIcon size={18} /> Meniu Principal
+                </button>
+              </div>
+
+              {/* Daily free-games indicator */}
+              <div className="flex justify-center">
+                <EnergyPill remaining={gamesRemaining} max={MAX_FREE_GAMES} />
               </div>
             </div>
           </div>
         </div>
       )}
+
+      {/* ─── PRO paywall (daily limit reached) ─────────────────────────────── */}
+      <ProPaywallModal
+        open={showPaywall}
+        onClose={() => setShowPaywall(false)}
+        onUpgrade={() => {
+          // TODO: wire to a real checkout flow.
+          beep(784, 0.18, "triangle");
+        }}
+      />
     </div>
   );
 }

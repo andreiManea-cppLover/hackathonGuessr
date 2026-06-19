@@ -1,6 +1,8 @@
 export interface HistoricalLocation {
   id: string;
   title: string;
+  /** Optional Romanian display title. Falls back to a formatted `title`. */
+  titleRo?: string;
   year: number;
   lat: number;
   lng: number;
@@ -8,6 +10,8 @@ export interface HistoricalLocation {
   description: string;
   clues: string[];
   is360?: boolean;
+  /** Optional explicit Wikipedia article URL (ro or en). */
+  wikiUrl?: string;
 }
 
 export const historicalLocations: HistoricalLocation[] = [
