@@ -296,7 +296,10 @@ export default function Home() {
                 Fiecare rundă — o epocă nouă de descoperit.
               </p>
 
-              <div className="flex flex-col sm:flex-row gap-4 mb-12 w-full justify-center items-center">
+              <div className="flex flex-col sm:flex-row gap-6 mb-12 w-full justify-center items-center">
+                <span className="flex items-center gap-1.5 text-sm text-[#f5c842]/70 font-semibold italic">
+                  <Clock size={16} /> 90s/rundă
+                </span>
                 <button
                   id="btn-start-game"
                   onClick={handleStartGame}
@@ -304,13 +307,9 @@ export default function Home() {
                 >
                   <Play size={20} /> Pornește Aventura
                 </button>
-                <div className="flex items-center gap-3 text-sm text-[#f5c842]/70 px-2 font-semibold italic">
-                  <span className="flex items-center gap-1.5"><Clock size={16} /> 90s/rundă</span>
-                  <span>·</span>
-                  <span className="flex items-center gap-1.5"><Target size={16} /> 5 Runde</span>
-                  <span>·</span>
-                  <span className="flex items-center gap-1.5"><Star size={16} /> Max 25K pct</span>
-                </div>
+                <span className="flex items-center gap-1.5 text-sm text-[#f5c842]/70 font-semibold italic">
+                  <Target size={16} /> 5 Runde
+                </span>
               </div>
 
               {/* How to play chips */}
