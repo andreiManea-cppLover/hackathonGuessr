@@ -6,6 +6,16 @@
 export const MAX_FREE_GAMES = 3;
 const STORAGE_KEY = "chronoMap_daily";
 
+/**
+ * Dev override: unlimited plays on localhost so the freemium gate never blocks
+ * local testing. Production hosts are unaffected — the daily limit applies there.
+ */
+export function isUnlimited(): boolean {
+  if (typeof window === "undefined") return false;
+  const host = window.location.hostname;
+  return host === "localhost" || host === "127.0.0.1" || host === "[::1]";
+}
+
 export interface DailyRecord {
   date: string;
   gamesPlayed: number;
@@ -38,16 +48,19 @@ export function getDailyRecord(): DailyRecord {
 
 /** Games still available today (0…MAX_FREE_GAMES). */
 export function getGamesRemaining(): number {
+  if (isUnlimited()) return MAX_FREE_GAMES; // always show a full bar on localhost
   return Math.max(0, MAX_FREE_GAMES - getDailyRecord().gamesPlayed);
 }
 
 /** True while the player still has free games left today. */
 export function canPlay(): boolean {
+  if (isUnlimited()) return true;
   return getDailyRecord().gamesPlayed < MAX_FREE_GAMES;
 }
 
 /** Increment today's counter (call when a game actually starts). */
 export function recordGamePlayed(): DailyRecord {
+  if (isUnlimited()) return getDailyRecord(); // no-op on localhost
   const current = getDailyRecord();
   const next: DailyRecord = { date: todayKey(), gamesPlayed: current.gamesPlayed + 1 };
   try {

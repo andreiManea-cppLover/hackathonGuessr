@@ -619,10 +619,7 @@ export default function Home() {
           {/* ── Bottom panel: Timeline (left) · CTA (center) · map footprint (right) ── */}
           <div className="absolute bottom-6 left-6 right-6 z-30 flex items-stretch gap-4">
             {/* Timeline panel — same footprint as the map */}
-            <div className="w-[380px] h-[210px] shrink-0 overflow-hidden bg-[#111318]/90 backdrop-blur-md border border-[#2e3340] rounded-2xl p-5 flex flex-col">
-              <div className="text-xs font-semibold text-[#4a5063] uppercase tracking-widest mb-4">
-                📅 În ce an a fost surprinsă această imagine?
-              </div>
+            <div className="w-[380px] h-[210px] shrink-0 overflow-hidden bg-[#111318]/80 backdrop-blur-xl border border-white/10 rounded-2xl p-6 flex flex-col justify-center">
               <TimelineSlider
                 value={selectedYear}
                 onChange={setSelectedYear}

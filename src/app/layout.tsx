@@ -31,7 +31,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ro" className={`${inter.variable} ${sora.variable} h-full`}>
-      <body className="min-h-full flex flex-col bg-[#111318] text-white antialiased selection:bg-amber-400 selection:text-black">
+      <body
+        suppressHydrationWarning
+        className="min-h-full flex flex-col bg-[#111318] text-white antialiased selection:bg-amber-400 selection:text-black"
+      >
         <main className="flex-1 flex flex-col">
           {children}
         </main>
