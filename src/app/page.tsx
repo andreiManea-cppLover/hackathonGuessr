@@ -66,6 +66,11 @@ export default function Home() {
   const [mapExpanded, setMapExpanded] = useState(false);
   const audioCtx = useRef<AudioContext | null>(null);
 
+  // Pannellum (360° panorama) viewer state & refs
+  const [pannellumLoaded, setPannellumLoaded] = useState(false);
+  const pannellumContainerRef = useRef<HTMLDivElement>(null);
+  const pannellumViewerRef = useRef<any>(null);
+
   // ── Audio ────────────────────────────────────────────────────────────────
   const beep = (freq = 440, dur = 0.12, type: OscillatorType = "sine") => {
     if (!soundEnabled) return;
@@ -124,6 +129,87 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isTimerActive, timer, gameState]);
 
+  // ── Load Pannellum Scripts ───────────────────────────────────────────────
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    // Load Pannellum CSS
+    if (!document.getElementById("pannellum-css")) {
+      const link = document.createElement("link");
+      link.id = "pannellum-css";
+      link.rel = "stylesheet";
+      link.href = "https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.css";
+      document.head.appendChild(link);
+    }
+
+    // Load Pannellum JS
+    if (!document.getElementById("pannellum-js")) {
+      const script = document.createElement("script");
+      script.id = "pannellum-js";
+      script.src = "https://cdn.jsdelivr.net/npm/pannellum@2.5.6/build/pannellum.js";
+      script.async = true;
+      script.onload = () => setPannellumLoaded(true);
+      document.head.appendChild(script);
+    } else {
+      if ((window as any).pannellum) {
+        setPannellumLoaded(true);
+      } else {
+        const script = document.getElementById("pannellum-js") as HTMLScriptElement;
+        if (script) {
+          const prevOnload = script.onload;
+          script.onload = (e) => {
+            if (prevOnload) (prevOnload as any)(e);
+            setPannellumLoaded(true);
+          };
+        }
+      }
+    }
+  }, []);
+
+  // ── Initialize/Destroy Pannellum 360 Viewer ──────────────────────────────
+  useEffect(() => {
+    if (!pannellumLoaded || gameState !== "PLAYING" || !rounds[currentRoundIndex]?.is360) {
+      if (pannellumViewerRef.current) {
+        try {
+          pannellumViewerRef.current.destroy();
+        } catch { /* ignore */ }
+        pannellumViewerRef.current = null;
+      }
+      return;
+    }
+
+    if (pannellumContainerRef.current && (window as any).pannellum) {
+      if (pannellumViewerRef.current) {
+        try {
+          pannellumViewerRef.current.destroy();
+        } catch { /* ignore */ }
+      }
+
+      try {
+        pannellumViewerRef.current = (window as any).pannellum.viewer(pannellumContainerRef.current, {
+          type: "equirectangular",
+          panorama: rounds[currentRoundIndex].imageUrl,
+          autoLoad: true,
+          showControls: true,
+          compass: false,
+          mouseZoom: true,
+          keyboardZoom: true,
+        });
+      } catch (err) {
+        console.error("Failed to initialize pannellum:", err);
+      }
+    }
+
+    return () => {
+      if (pannellumViewerRef.current) {
+        try {
+          pannellumViewerRef.current.destroy();
+        } catch { /* ignore */ }
+        pannellumViewerRef.current = null;
+      }
+    };
+  }, [pannellumLoaded, gameState, currentRoundIndex, rounds]);
+
   // ── Game helpers ─────────────────────────────────────────────────────────
   const resetRound = () => {
     setGuessCoords(null);
@@ -138,7 +224,10 @@ export default function Home() {
   };
 
   const handleStartGame = () => {
-    const shuffled = [...historicalLocations].sort(() => 0.5 - Math.random()).slice(0, 5);
+    const firstRound = historicalLocations.find(loc => loc.id === "1") || historicalLocations[0];
+    const otherLocations = historicalLocations.filter(loc => loc.id !== "1");
+    const shuffledOthers = [...otherLocations].sort(() => 0.5 - Math.random()).slice(0, 4);
+    const shuffled = [firstRound, ...shuffledOthers];
     setRounds(shuffled);
     setCurrentRoundIndex(0);
     setTotalScore(0);
@@ -361,19 +450,27 @@ export default function Home() {
       {/* ─── PLAYING ──────────────────────────────────────────────────────── */}
       {gameState === "PLAYING" && rounds[currentRoundIndex] && (
         <div className="flex-1 flex flex-col relative overflow-hidden" style={{ height: "100vh" }}>
-          {/* Full-screen image */}
+          {/* Full-screen image or 360-degree panorama viewer */}
           <div className="absolute inset-0">
-            <img
-              src={rounds[currentRoundIndex].imageUrl}
-              alt="Historical event"
-              className="w-full h-full object-cover"
-              onError={(e) => {
-                (e.target as HTMLImageElement).src =
-                  "https://images.unsplash.com/photo-1461360370896-922624d12aa1?q=80&w=1600";
-              }}
-            />
+            {rounds[currentRoundIndex].is360 ? (
+              <div 
+                ref={pannellumContainerRef} 
+                className="w-full h-full"
+                style={{ background: "#0c0f17" }}
+              />
+            ) : (
+              <img
+                src={rounds[currentRoundIndex].imageUrl}
+                alt="Historical event"
+                className="w-full h-full object-cover"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src =
+                    "https://images.unsplash.com/photo-1461360370896-922624d12aa1?q=80&w=1600";
+                }}
+              />
+            )}
             {/* Gradient vignette */}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/30" />
+            <div className="absolute inset-0 pointer-events-none bg-gradient-to-t from-black/60 via-transparent to-black/30" />
           </div>
 
           {/* ── HUD top-left ── */}

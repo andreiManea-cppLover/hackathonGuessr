@@ -7,6 +7,7 @@ export interface HistoricalLocation {
   imageUrl: string;
   description: string;
   clues: string[];
+  is360?: boolean;
 }
 
 export const historicalLocations: HistoricalLocation[] = [
@@ -16,7 +17,8 @@ export const historicalLocations: HistoricalLocation[] = [
     year: 1888,
     lat: 48.8584,
     lng: 2.2945,
-    imageUrl: "https://upload.wikimedia.org/wikipedia/commons/a/af/Tour_Eiffel_construction_1888.jpg",
+    imageUrl: "/images/poza2.jpeg",
+    is360: true,
     description: "Turnul Eiffel a fost construit între 1887 și 1889 ca arc de intrare pentru Expoziția Universală din 1889, care a marcat centenarul Revoluției Franceze.",
     clues: [
       "Se află în capitala modei și a dragostei.",
