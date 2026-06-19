@@ -89,7 +89,7 @@ export default function ResultsPanel({
   const descriptionRo = round.description.replace(round.title, titleRo);
 
   return (
-    <section className="lg:w-[440px] xl:w-[500px] shrink-0 flex flex-col border-r border-geo-border bg-geo-dark overflow-hidden">
+    <section className="w-full flex-1 min-h-0 lg:flex-none lg:w-[440px] xl:w-[500px] lg:shrink-0 flex flex-col lg:border-r border-geo-border bg-geo-dark overflow-hidden">
       {/* ── Scrollable content ── */}
       <div className="flex-1 overflow-y-auto flex flex-col gap-6 p-6">
 
@@ -111,7 +111,7 @@ export default function ResultsPanel({
           <div className="flex flex-col items-center text-center gap-1 py-2 score-pop">
             <span className="text-xs font-medium uppercase tracking-widest text-gray-400">Scor Rundă</span>
             <span
-              className={`text-6xl font-black tabular-nums tracking-tight ${roundTier.text}`}
+              className={`text-5xl sm:text-6xl font-black tabular-nums tracking-tight ${roundTier.text}`}
               style={{ fontFamily: "var(--font-sora)" }}
             >
               +{result.roundScore.toLocaleString()}

@@ -20,10 +20,11 @@ export function calculateScore(distanceKm: number, yearDiff: number): { distance
   const decayKm = 2000;
   const distanceScore = Math.round(maxScoreComponent * Math.exp(-distanceKm / decayKm));
   
-  // An: scădere exponențială.
-  // Decay factor de 25 ani: la 25 ani eroare, scorul scade la ~36% din valoarea maximă.
-  const decayYears = 25;
-  const yearScore = Math.round(maxScoreComponent * Math.exp(-yearDiff / decayYears));
+  // An: scădere exponențială cu timp de înjumătățire de 100 de ani.
+  // Scorul se înjumătățește la fiecare 100 de ani de eroare:
+  //   0 ani → 100% · 50 ani → ~71% (ghiceală bună) · 100 ani → 50% · 200 ani → 25%.
+  const yearHalfLife = 100;
+  const yearScore = Math.round(maxScoreComponent * Math.pow(2, -yearDiff / yearHalfLife));
   
   return {
     distanceScore,

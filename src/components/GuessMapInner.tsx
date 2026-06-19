@@ -103,6 +103,19 @@ function GeodesicArc({ from, to }: { from: LatLng; to: LatLng }) {
   );
 }
 
+// Leaflet only renders tiles for the size it knew at init. When the container
+// resizes (e.g. the mobile mini-map expanding to fullscreen), tell it to recompute.
+function InvalidateOnResize() {
+  const map = useMap();
+  useEffect(() => {
+    const el = map.getContainer();
+    const ro = new ResizeObserver(() => map.invalidateSize());
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [map]);
+  return null;
+}
+
 function MapClickHandler({
   onPlaceMarker,
   disabled,
@@ -167,6 +180,7 @@ export default function GuessMapInner({
           zoom control on the right edge, clear of the panel. */}
       <ZoomControl position={showResults ? "topright" : "topleft"} />
 
+      <InvalidateOnResize />
       <MapClickHandler onPlaceMarker={onPlaceMarker} disabled={showResults} />
 
       {guessCoords && (

@@ -158,6 +158,37 @@ body {
   z-index: 60;
 }
 
+/* ── Mobile: map sits top-right under the HUD; expands to (near) fullscreen ── */
+@media (max-width: 767px) {
+  .map-corner {
+    top: 100px;
+    bottom: auto;
+    right: 10px;
+    left: auto;
+    width: 42vw;
+    max-width: 190px;
+    height: 26vw;
+    max-height: 130px;
+    border-radius: 12px;
+  }
+  .map-corner.expanded {
+    position: fixed;
+    inset: 8px;
+    top: 8px;
+    width: auto;
+    height: auto;
+    min-width: 0;
+    min-height: 0;
+    max-width: none;
+    max-height: none;
+    z-index: 80;
+  }
+  /* Keep the 360° viewer controls clear of the mobile HUD */
+  .pnlm-controls-container {
+    top: 150px !important;
+  }
+}
+
 /* ── Pannellum 360° controls — keep them out of the bottom-left timeline area ── */
 .pnlm-controls-container {
   top: 90px !important;

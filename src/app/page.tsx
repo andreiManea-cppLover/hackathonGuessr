@@ -407,11 +407,11 @@ export default function Home() {
 
   // ════════════════════════════════════════════════════════════════════════════
   return (
-    <div className="min-h-screen w-full flex flex-col bg-[#111318] text-[#e8eaf0] font-inter">
+    <div className="min-h-dvh w-full flex flex-col bg-[#111318] text-[#e8eaf0] font-inter">
 
       {/* ─── MENU ─────────────────────────────────────────────────────────── */}
       {gameState === "MENU" && (
-        <div className="relative flex-1 flex flex-col h-screen overflow-hidden">
+        <div className="relative flex-1 flex flex-col h-dvh overflow-hidden">
           {/* ── Cinematic background: Earth from space + heavy overlay for readability ── */}
           <div className="absolute inset-0">
             <img
@@ -494,7 +494,7 @@ export default function Home() {
 
       {/* ─── PLAYING ──────────────────────────────────────────────────────── */}
       {gameState === "PLAYING" && rounds[currentRoundIndex] && (
-        <div className="flex-1 flex flex-col relative overflow-hidden" style={{ height: "100vh" }}>
+        <div className="flex-1 flex flex-col relative overflow-hidden" style={{ height: "100dvh" }}>
           {/* Full-screen image or 360-degree panorama viewer */}
           <div className="absolute inset-0">
             {rounds[currentRoundIndex].is360 ? (
@@ -518,108 +518,100 @@ export default function Home() {
             <div className="absolute inset-0 pointer-events-none bg-gradient-to-t from-black/60 via-transparent to-black/30" />
           </div>
 
-          {/* ── HUD top-left ── */}
-          <div className="absolute top-4 left-4 z-30 flex items-center gap-3">
-            {/* Logo */}
-            <div className="bg-black/60 backdrop-blur border border-white/10 rounded-xl px-4 py-2 flex items-center gap-2">
-              <Globe size={15} className="text-[#f5c842]" />
-              <span className="font-bold text-sm" style={{ fontFamily: "var(--font-sora)" }}>ChronoMap</span>
-            </div>
-
-            {/* Round indicator */}
-            <div className="bg-black/60 backdrop-blur border border-white/10 rounded-xl px-4 py-2">
-              <div className="flex items-center gap-2 text-xs text-gray-400 mb-1.5">
-                <span className="font-semibold text-white">Runda {currentRoundIndex + 1}</span>
-                <span>din 5</span>
-              </div>
-              <div className="round-progress w-24">
-                <div className="round-progress-fill" style={{ width: `${((currentRoundIndex + 1) / 5) * 100}%` }} />
-              </div>
-            </div>
-          </div>
-
-          {/* ── HUD top-center: Timer ── */}
-          <div className="absolute top-4 left-1/2 -translate-x-1/2 z-30">
-            <div className="bg-black/60 backdrop-blur border border-white/10 rounded-xl px-5 py-2.5 flex items-center gap-3 min-w-[120px] justify-center">
+          {/* ── HUD top-left: Timer (primary, enlarged) + Round ── */}
+          <div className="absolute top-2 left-2 sm:top-4 sm:left-4 z-30 flex items-stretch gap-2 sm:gap-3">
+            {/* Timer — the most important readout: bigger, accent-bordered */}
+            <div className="bg-black/65 backdrop-blur border border-[#f5c842]/40 rounded-xl px-3 py-2 sm:px-5 sm:py-3 flex items-center gap-2.5 sm:gap-3.5 shadow-lg shadow-black/30">
               <div
-                className="w-8 h-8 rounded-full flex items-center justify-center relative"
+                className="w-9 h-9 sm:w-11 sm:h-11 rounded-full flex items-center justify-center relative shrink-0"
                 style={{
                   background: `conic-gradient(${timerColor} ${timerPct}%, #2e3340 0%)`,
                 }}
               >
                 <div className="absolute inset-1 rounded-full bg-black/70 flex items-center justify-center">
-                  <Clock size={12} style={{ color: timerColor }} />
+                  <Clock size={14} className="sm:hidden" style={{ color: timerColor }} />
+                  <Clock size={16} className="hidden sm:block" style={{ color: timerColor }} />
                 </div>
               </div>
-              <span className="font-bold text-lg tabular-nums" style={{ color: timerColor, fontFamily: "var(--font-sora)" }}>
+              <span className="font-bold text-xl sm:text-3xl tabular-nums leading-none" style={{ color: timerColor, fontFamily: "var(--font-sora)" }}>
                 {String(Math.floor(timer / 60)).padStart(2, "0")}:{String(timer % 60).padStart(2, "0")}
               </span>
             </div>
+
+            {/* Round indicator */}
+            <div className="bg-black/60 backdrop-blur border border-white/10 rounded-xl px-3 py-1.5 sm:px-4 sm:py-2 flex flex-col justify-center">
+              <div className="flex items-center gap-1.5 sm:gap-2 text-[11px] sm:text-xs text-gray-400 mb-1 sm:mb-1.5">
+                <span className="font-semibold text-white">Runda {currentRoundIndex + 1}</span>
+                <span>din 5</span>
+              </div>
+              <div className="round-progress w-16 sm:w-24">
+                <div className="round-progress-fill" style={{ width: `${((currentRoundIndex + 1) / 5) * 100}%` }} />
+              </div>
+            </div>
           </div>
 
-          {/* ── HUD top-right: Score + Powerups ── */}
-          <div className="absolute top-4 right-4 z-30 flex flex-col items-end gap-2">
-            <div className="bg-black/60 backdrop-blur border border-white/10 rounded-xl px-4 py-2 flex items-center gap-2">
-              <Award size={14} className="text-[#f5c842]" />
-              <span className="font-bold text-sm" style={{ fontFamily: "var(--font-sora)" }}>
+          {/* ── HUD top-right: Score + Powerups — one symmetric row, equal heights ── */}
+          <div className="absolute top-2 right-2 sm:top-4 sm:right-4 z-30 flex items-stretch gap-2">
+            {/* Score */}
+            <div className="h-9 sm:h-10 bg-black/60 backdrop-blur border border-white/10 rounded-xl px-3 sm:px-4 flex items-center gap-2">
+              <Award size={14} className="text-[#f5c842] shrink-0" />
+              <span className="font-bold text-xs sm:text-sm tabular-nums whitespace-nowrap" style={{ fontFamily: "var(--font-sora)" }}>
                 {totalScore.toLocaleString()} pct
               </span>
             </div>
 
             {/* Control buttons — unified glassmorphism, accent only on active/toggle */}
-            <div className="flex gap-2">
-              <button
-                id="btn-powerup-clue"
-                onClick={useClue}
-                disabled={!powerUps.clue}
-                title="Indiciu (Bunicul Guraliv)"
-                className={`w-10 h-10 rounded-xl border backdrop-blur flex items-center justify-center transition-all duration-200 ${
-                  powerUps.clue
-                    ? "bg-black/60 border-white/15 text-white hover:text-[#f5c842] hover:border-[#f5c842]/60 hover:scale-110 active:scale-95 cursor-pointer"
-                    : "bg-black/30 border-white/5 text-[#3a3f50] cursor-not-allowed"
-                }`}
-              >
-                <HelpCircle size={16} />
-              </button>
-              <button
-                id="btn-powerup-delorean"
-                onClick={useDelorean}
-                disabled={!powerUps.delorean}
-                title="DeLorean Warp (îngustează intervalul de ani)"
-                className={`w-10 h-10 rounded-xl border backdrop-blur flex items-center justify-center transition-all duration-200 ${
-                  powerUps.delorean
-                    ? "bg-black/60 border-white/15 text-white hover:text-[#f5c842] hover:border-[#f5c842]/60 hover:scale-110 active:scale-95 cursor-pointer"
-                    : "bg-black/30 border-white/5 text-[#3a3f50] cursor-not-allowed"
-                }`}
-              >
-                <Zap size={16} />
-              </button>
-              <button
-                onClick={() => setSoundEnabled((s) => !s)}
-                title={soundEnabled ? "Oprește sunetul" : "Pornește sunetul"}
-                className={`w-10 h-10 rounded-xl border backdrop-blur flex items-center justify-center transition-all duration-200 hover:scale-110 active:scale-95 cursor-pointer ${
-                  soundEnabled
-                    ? "bg-black/60 border-white/15 text-white hover:text-[#f5c842] hover:border-[#f5c842]/60"
-                    : "bg-[#f5c842]/15 border-[#f5c842]/50 text-[#f5c842]"
-                }`}
-              >
-                {soundEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
-              </button>
-            </div>
+            <button
+              id="btn-powerup-clue"
+              onClick={useClue}
+              disabled={!powerUps.clue}
+              title="Indiciu (Bunicul Guraliv)"
+              className={`w-9 h-9 sm:w-10 sm:h-10 shrink-0 rounded-xl border backdrop-blur flex items-center justify-center transition-all duration-200 ${
+                powerUps.clue
+                  ? "bg-black/60 border-white/15 text-white hover:text-[#f5c842] hover:border-[#f5c842]/60 hover:scale-110 active:scale-95 cursor-pointer"
+                  : "bg-black/30 border-white/5 text-[#3a3f50] cursor-not-allowed"
+              }`}
+            >
+              <HelpCircle size={16} />
+            </button>
+            <button
+              id="btn-powerup-delorean"
+              onClick={useDelorean}
+              disabled={!powerUps.delorean}
+              title="DeLorean Warp (îngustează intervalul de ani)"
+              className={`w-9 h-9 sm:w-10 sm:h-10 shrink-0 rounded-xl border backdrop-blur flex items-center justify-center transition-all duration-200 ${
+                powerUps.delorean
+                  ? "bg-black/60 border-white/15 text-white hover:text-[#f5c842] hover:border-[#f5c842]/60 hover:scale-110 active:scale-95 cursor-pointer"
+                  : "bg-black/30 border-white/5 text-[#3a3f50] cursor-not-allowed"
+              }`}
+            >
+              <Zap size={16} />
+            </button>
+            <button
+              onClick={() => setSoundEnabled((s) => !s)}
+              title={soundEnabled ? "Oprește sunetul" : "Pornește sunetul"}
+              className={`w-9 h-9 sm:w-10 sm:h-10 shrink-0 rounded-xl border backdrop-blur flex items-center justify-center transition-all duration-200 hover:scale-110 active:scale-95 cursor-pointer ${
+                soundEnabled
+                  ? "bg-black/60 border-white/15 text-white hover:text-[#f5c842] hover:border-[#f5c842]/60"
+                  : "bg-[#f5c842]/15 border-[#f5c842]/50 text-[#f5c842]"
+              }`}
+            >
+              {soundEnabled ? <Volume2 size={16} /> : <VolumeX size={16} />}
+            </button>
           </div>
 
           {/* ── Clue panel ── */}
           {clueVisible && (
-            <div className="absolute top-20 left-4 z-30 max-w-xs bg-black/75 backdrop-blur-md border border-[#f5c842]/30 rounded-xl p-4 score-pop">
+            <div className="absolute top-16 left-2 sm:top-24 sm:left-4 z-30 max-w-[60vw] sm:max-w-xs bg-black/75 backdrop-blur-md border border-[#f5c842]/30 rounded-xl p-3 sm:p-4 score-pop">
               <div className="text-[10px] font-bold text-[#f5c842] uppercase tracking-widest mb-1.5">💡 Indiciu</div>
               <p className="text-sm text-gray-200 leading-relaxed">{rounds[currentRoundIndex].clues[clueIndex]}</p>
             </div>
           )}
 
           {/* ── Bottom panel: Timeline (left) · CTA (center) · map footprint (right) ── */}
-          <div className="absolute bottom-6 left-6 right-6 z-30 flex items-stretch gap-4">
+          <div className="absolute bottom-3 left-3 right-3 sm:bottom-6 sm:left-6 sm:right-6 z-30 flex flex-col md:flex-row items-stretch gap-3 sm:gap-4">
             {/* Timeline panel — same footprint as the map */}
-            <div className="w-[380px] h-[210px] shrink-0 overflow-hidden bg-[#111318]/80 backdrop-blur-xl border border-white/10 rounded-2xl p-6 flex flex-col justify-center">
+            <div className="w-full md:w-[380px] md:h-[210px] shrink-0 overflow-hidden bg-[#111318]/85 md:bg-[#111318]/80 backdrop-blur-xl border border-white/10 rounded-2xl p-4 sm:p-6 flex flex-col justify-center">
               <TimelineSlider
                 value={selectedYear}
                 onChange={setSelectedYear}
@@ -630,7 +622,7 @@ export default function Home() {
 
             {/* Guess button — primary CTA, centered between the two panels */}
             <div className="flex-1 flex items-center justify-center">
-              <div className="relative">
+              <div className="relative w-full md:w-auto">
                 {/* Dynamic warning toast: only when CTA pressed without a pin */}
                 {showPinWarning && (
                   <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 z-50 score-pop bg-[#e05252] text-white rounded-xl px-4 py-2.5 text-xs font-semibold whitespace-nowrap shadow-lg shadow-[#e05252]/40 flex items-center gap-1.5">
@@ -642,7 +634,7 @@ export default function Home() {
                 <button
                   id="btn-lock-guess"
                   onClick={handleGuessClick}
-                  className={`btn-primary px-9 py-5 text-base font-extrabold whitespace-nowrap transition-all duration-200 ${
+                  className={`btn-primary w-full md:w-auto justify-center px-6 py-4 sm:px-9 sm:py-5 text-sm sm:text-base font-extrabold whitespace-nowrap transition-all duration-200 ${
                     guessCoords
                       ? "shadow-[0_8px_28px_rgba(245,200,66,0.45)] hover:scale-[1.03]"
                       : "opacity-80 hover:opacity-100"
@@ -654,8 +646,8 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Right spacer — reserves the map footprint so the CTA stays centered */}
-            <div className="w-[380px] h-[210px] shrink-0 pointer-events-none" aria-hidden />
+            {/* Right spacer — reserves the map footprint so the CTA stays centered (desktop only) */}
+            <div className="hidden md:block w-[380px] h-[210px] shrink-0 pointer-events-none" aria-hidden />
           </div>
 
           {/* ── Map corner (GeoGuessr style) — expands on hover or via toggle ── */}
@@ -690,7 +682,7 @@ export default function Home() {
 
       {/* ─── RESULT ───────────────────────────────────────────────────────── */}
       {gameState === "RESULT" && rounds[currentRoundIndex] && roundResult && (
-        <div className="flex-1 flex flex-col lg:flex-row overflow-hidden" style={{ height: "100vh" }}>
+        <div className="flex-1 flex flex-col-reverse lg:flex-row overflow-hidden" style={{ height: "100dvh" }}>
           {/* Left: Info panel */}
           <ResultsPanel
             round={rounds[currentRoundIndex]}
@@ -703,8 +695,8 @@ export default function Home() {
             onRecenter={() => setMapRecenter((n) => n + 1)}
           />
 
-          {/* Right: Map (full height) */}
-          <div className="flex-1 relative">
+          {/* Right: Map (full height on desktop, fixed band on mobile) */}
+          <div className="relative h-[40vh] shrink-0 min-h-0 lg:h-auto lg:flex-1">
             <GuessMap
               guessCoords={guessCoords}
               onPlaceMarker={() => {}}
@@ -729,7 +721,7 @@ export default function Home() {
 
       {/* ─── SUMMARY ──────────────────────────────────────────────────────── */}
       {gameState === "SUMMARY" && (
-        <div className="flex flex-col h-screen overflow-hidden">
+        <div className="flex flex-col h-dvh overflow-hidden">
           {/* Header */}
           <header className="flex items-center justify-between px-8 py-5 border-b border-[#2e3340]">
             <div className="flex items-center gap-3">
