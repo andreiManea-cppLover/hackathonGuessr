@@ -696,7 +696,7 @@ export default function Home() {
       {gameState === "SUMMARY" && (
         <div className="flex flex-col h-dvh overflow-hidden">
           {/* Header */}
-          <header className="flex items-center justify-between px-8 py-5 border-b border-[#2e3340]">
+          <header className="flex items-center justify-between px-8 py-3.5 border-b border-[#2e3340]">
             <div className="flex items-center gap-3">
               <Globe size={22} className="text-[#f5c842]" />
               <span className="text-lg font-bold" style={{ fontFamily: "var(--font-sora)" }}>
@@ -705,12 +705,12 @@ export default function Home() {
             </div>
           </header>
 
-          <div className="flex-1 flex flex-col items-center justify-center p-6 sm:p-8">
-            <div className="w-full max-w-lg flex flex-col gap-6 mx-auto">
+          <div className="flex-1 flex flex-col items-center justify-center p-4 sm:p-6 overflow-hidden">
+            <div className="w-full max-w-lg flex flex-col gap-4 mx-auto">
               {/* Heading */}
               <div className="text-center">
-                <div className="text-sm text-[#4a5063] font-semibold uppercase tracking-[0.2em] mb-2">Misiune Finalizată</div>
-                <h2 className="text-4xl sm:text-5xl font-black leading-tight" style={{ fontFamily: "var(--font-sora)" }}>
+                <div className="text-xs text-[#4a5063] font-semibold uppercase tracking-[0.2em] mb-1.5">Misiune Finalizată</div>
+                <h2 className="text-3xl sm:text-4xl font-black leading-tight" style={{ fontFamily: "var(--font-sora)" }}>
                   Scor Final
                 </h2>
               </div>
@@ -725,11 +725,11 @@ export default function Home() {
                 const C = 2 * Math.PI * R;
                 const dash = (pct / 100) * C;
                 return (
-                  <div className="card p-7 sm:p-8 flex flex-col items-center score-pop">
+                  <div className="card p-5 sm:p-6 flex flex-col items-center score-pop">
                     {/* New record badge */}
                     {isNewRecord && (
                       <div
-                        className="mb-5 inline-flex items-center gap-2 rounded-full px-4 py-1.5 bg-emerald-500/15 border border-emerald-400/50 text-emerald-300 text-xs font-bold uppercase tracking-widest score-pop"
+                        className="mb-3 inline-flex items-center gap-2 rounded-full px-4 py-1.5 bg-emerald-500/15 border border-emerald-400/50 text-emerald-300 text-xs font-bold uppercase tracking-widest score-pop"
                         style={{ boxShadow: "0 0 22px rgba(52,211,153,0.45)" }}
                       >
                         <Award size={14} /> Nou Record!
@@ -737,7 +737,7 @@ export default function Home() {
                     )}
 
                     {/* Progress ring */}
-                    <div className="relative w-52 h-52">
+                    <div className="relative w-40 h-40 sm:w-44 sm:h-44">
                       <svg className="w-full h-full -rotate-90" viewBox="0 0 200 200">
                         <circle cx="100" cy="100" r={R} fill="none" stroke="#2e3340" strokeWidth="12" />
                         <circle
@@ -752,15 +752,15 @@ export default function Home() {
                       </svg>
                       <div className="absolute inset-0 flex flex-col items-center justify-center">
                         <div
-                          className="text-5xl font-black tabular-nums leading-none"
+                          className="text-4xl font-black tabular-nums leading-none"
                           style={{ fontFamily: "var(--font-sora)", color: ringColor }}
                         >
                           {totalScore.toLocaleString()}
                         </div>
-                        <div className="text-[11px] text-[#4a5063] font-medium mt-1.5">
+                        <div className="text-[10px] text-[#4a5063] font-medium mt-1">
                           din {max.toLocaleString()}
                         </div>
-                        <div className="mt-2 text-xs font-bold tabular-nums" style={{ color: ringColor }}>
+                        <div className="mt-1.5 text-xs font-bold tabular-nums" style={{ color: ringColor }}>
                           {pct}%
                         </div>
                       </div>
@@ -768,7 +768,7 @@ export default function Home() {
 
                     {/* Rank badge */}
                     <div
-                      className="mt-6 inline-flex items-center gap-2.5 rounded-full pl-3 pr-5 py-2 border"
+                      className="mt-4 inline-flex items-center gap-2.5 rounded-full pl-3 pr-5 py-2 border"
                       style={{
                         background: `${ringColor}1a`,
                         borderColor: `${ringColor}59`,
@@ -786,7 +786,7 @@ export default function Home() {
                     </div>
 
                     {/* Personal best */}
-                    <div className="mt-4 flex items-center gap-1.5 text-sm font-medium text-gray-400">
+                    <div className="mt-3 flex items-center gap-1.5 text-sm font-medium text-gray-400">
                       <Trophy size={14} />
                       Record Personal:
                       <span className="text-gray-200 font-semibold tabular-nums">
@@ -798,8 +798,8 @@ export default function Home() {
               })()}
 
               {/* ── Match summary breakdown ── */}
-              <div className="card p-5">
-                <div className="text-[11px] font-bold text-[#4a5063] uppercase tracking-[0.16em] mb-3">
+              <div className="card p-4">
+                <div className="text-[11px] font-bold text-[#4a5063] uppercase tracking-[0.16em] mb-2.5">
                   Rezumat Runde
                 </div>
                 <div className="flex items-stretch gap-2.5">
@@ -808,9 +808,9 @@ export default function Home() {
                     const has = s !== undefined;
                     const c = !has ? "#2e3340" : s >= 4000 ? "#4dbb6e" : s >= 2000 ? "#f5c842" : "#e05252";
                     return (
-                      <div key={i} className="flex-1 flex flex-col items-center gap-2">
+                      <div key={i} className="flex-1 flex flex-col items-center gap-1.5">
                         <div
-                          className="w-full rounded-lg py-2.5 flex items-center justify-center text-xs font-bold tabular-nums border transition-all"
+                          className="w-full rounded-lg py-2 flex items-center justify-center text-xs font-bold tabular-nums border transition-all"
                           style={{
                             background: has ? `${c}1f` : "transparent",
                             borderColor: `${c}66`,
@@ -827,17 +827,17 @@ export default function Home() {
               </div>
 
               {/* ── Action buttons: primary CTA + secondary ── */}
-              <div className="flex flex-row gap-4">
+              <div className="flex flex-row gap-3">
                 <button
                   id="btn-play-again"
                   onClick={attemptStartGame}
-                  className="btn-primary flex-1 justify-center py-4 text-base shadow-[0_8px_28px_rgba(245,200,66,0.45)] hover:scale-[1.02] transition-transform"
+                  className="btn-primary flex-1 justify-center py-3.5 text-base shadow-[0_8px_28px_rgba(245,200,66,0.45)] hover:scale-[1.02] transition-transform"
                 >
                   <RotateCcw size={18} /> Joacă Din Nou
                 </button>
                 <button
                   onClick={() => setGameState("MENU")}
-                  className="flex-1 justify-center py-4 inline-flex items-center gap-2 rounded-[10px] font-semibold text-sm bg-white/5 border border-white/10 text-gray-200 hover:bg-white/10 hover:border-white/20 hover:text-white active:scale-[0.98] transition-all cursor-pointer"
+                  className="flex-1 justify-center py-3.5 inline-flex items-center gap-2 rounded-[10px] font-semibold text-sm bg-white/5 border border-white/10 text-gray-200 hover:bg-white/10 hover:border-white/20 hover:text-white active:scale-[0.98] transition-all cursor-pointer"
                   style={{ fontFamily: "var(--font-sora)" }}
                 >
                   <HomeIcon size={18} /> Meniu Principal

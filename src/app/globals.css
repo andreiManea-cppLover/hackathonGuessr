@@ -195,6 +195,10 @@ body {
   bottom: auto !important;
   left: 16px !important;
 }
+/* Hide the +/- zoom buttons (clutter the top-left HUD); scroll/keyboard zoom still works. */
+.pnlm-zoom-controls {
+  display: none !important;
+}
 .pnlm-control {
   border-radius: 8px !important;
   border: 1px solid rgba(255,255,255,0.12) !important;
