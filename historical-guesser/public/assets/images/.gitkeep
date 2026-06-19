@@ -1,0 +1,2 @@
+# Place your generated 360° equirectangular JPEGs here.
+# Reference them from src/data/dataset.json as: /assets/images/<id>.jpg
