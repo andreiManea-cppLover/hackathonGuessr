@@ -7,13 +7,12 @@ export const MAX_FREE_GAMES = 3;
 const STORAGE_KEY = "chronoMap_daily";
 
 /**
- * Dev override: unlimited plays on localhost so the freemium gate never blocks
- * local testing. Production hosts are unaffected — the daily limit applies there.
+ * Daily limit temporarily DISABLED everywhere ("deocamdată"). The per-day
+ * counter logic below is kept intact — to re-enable the freemium gate, restore
+ * this to the localhost-only check.
  */
 export function isUnlimited(): boolean {
-  if (typeof window === "undefined") return false;
-  const host = window.location.hostname;
-  return host === "localhost" || host === "127.0.0.1" || host === "[::1]";
+  return true;
 }
 
 export interface DailyRecord {

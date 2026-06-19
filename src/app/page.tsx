@@ -8,7 +8,7 @@ import TimelineSlider from "@/components/TimelineSlider";
 import GuessMap from "@/components/GuessMap";
 import ResultsPanel from "@/components/ResultsPanel";
 import ProPaywallModal from "@/components/ProPaywallModal";
-import { MAX_FREE_GAMES, getGamesRemaining, canPlay, recordGamePlayed } from "@/utils/dailyLimit";
+import { canPlay, recordGamePlayed } from "@/utils/dailyLimit";
 import confetti from "canvas-confetti";
 import {
   MapPin, Clock, RotateCcw, Zap,
@@ -32,25 +32,6 @@ interface LeaderboardEntry {
   date: string;
 }
 
-// ── Daily free-games indicator pill ──────────────────────────────────────────
-function EnergyPill({ remaining, max }: { remaining: number; max: number }) {
-  const empty = remaining <= 0;
-  return (
-    <div
-      title="Jocuri gratuite rămase azi"
-      className={`inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-xs font-semibold backdrop-blur transition-colors ${
-        empty
-          ? "bg-[#e05252]/15 border-[#e05252]/50 text-[#e05252]"
-          : "bg-white/5 border-white/10 text-gray-300"
-      }`}
-    >
-      <Zap size={13} className={empty ? "text-[#e05252]" : "text-[#f5c842]"} />
-      Energii gratuite:
-      <span className="tabular-nums font-bold">{remaining}/{max}</span>
-    </div>
-  );
-}
-
 // ── Main component ────────────────────────────────────────────────────────────
 export default function Home() {
   const [gameState, setGameState] = useState<GameState>("MENU");
@@ -60,7 +41,6 @@ export default function Home() {
   const [roundScores, setRoundScores] = useState<number[]>([]);
   const [bestScore, setBestScore] = useState<number | null>(null);
   const [isNewRecord, setIsNewRecord] = useState(false);
-  const [gamesRemaining, setGamesRemaining] = useState(MAX_FREE_GAMES);
   const [showPaywall, setShowPaywall] = useState(false);
   const [selectedYear, setSelectedYear] = useState(SLIDER_MID);
   const [guessCoords, setGuessCoords] = useState<{ lat: number; lng: number } | null>(null);
@@ -134,11 +114,6 @@ export default function Home() {
     }
     setIsNewRecord(beat);
   }, [gameState, totalScore]);
-
-  // ── Daily free-games counter — synced on the client (avoids SSR mismatch) ──
-  useEffect(() => {
-    setGamesRemaining(getGamesRemaining());
-  }, [gameState]);
 
   // ── Leaderboard fetch ────────────────────────────────────────────────────
   useEffect(() => {
@@ -305,7 +280,6 @@ export default function Home() {
       return;
     }
     recordGamePlayed();
-    setGamesRemaining(getGamesRemaining());
     handleStartGame();
   };
 
@@ -433,7 +407,6 @@ export default function Home() {
               </span>
             </div>
             <div className="flex items-center gap-3">
-              <EnergyPill remaining={gamesRemaining} max={MAX_FREE_GAMES} />
               <button
                 onClick={() => setSoundEnabled((s) => !s)}
                 title={soundEnabled ? "Oprește sunetul" : "Pornește sunetul"}
@@ -869,11 +842,6 @@ export default function Home() {
                 >
                   <HomeIcon size={18} /> Meniu Principal
                 </button>
-              </div>
-
-              {/* Daily free-games indicator */}
-              <div className="flex justify-center">
-                <EnergyPill remaining={gamesRemaining} max={MAX_FREE_GAMES} />
               </div>
             </div>
           </div>
